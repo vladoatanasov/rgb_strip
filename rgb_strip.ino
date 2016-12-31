@@ -4,7 +4,7 @@
 #define CLK 2//pins definitions for the driver        
 #define DIO 3
 RGBdriver Driver(CLK, DIO);
-SoftwareSerial BT(10, 11); 
+SoftwareSerial BT(10, 11);
 
 int black[3]  = { 0, 0, 0 };
 int white[3]  = { 100, 100, 100 };
@@ -27,33 +27,33 @@ int prevR = redVal;
 int prevG = grnVal;
 int prevB = bluVal;
 
+bool inAutoMode = true;
 
 void setup()
 {
-    BT.begin(9600);
+  BT.begin(9600);
+  Serial.begin(9600);
 }
 
 void loop()
 {
-  crossFade(red);
-  crossFade(green);
-  crossFade(blue);
-  crossFade(yellow);
-  crossFade(white);
+  if(inAutoMode) {
+    crossFade(red);
+    crossFade(green);
+    crossFade(blue);
+    crossFade(yellow);
+    crossFade(white);
+  } else {
+    readBT();
+  }
 
+  //if you want to set the name of the BT device, send "AT+NAMEmy name" via serial
+  //  if (BT.available())
+  //    Serial.write(BT.read());
+  //
+  //  if (Serial.available())
+  //    BT.write(Serial.read());
 
-  //  Driver.begin(); // begin
-  //  Driver.SetColor(255, 0, 0); //Red. first node data
-  //  Driver.end();
-  //  delay(500);
-  //  Driver.begin(); // begin
-  //  Driver.SetColor(0, 255, 0); //Green. first node data
-  //  Driver.end();
-  //  delay(500);
-  //  Driver.begin(); // begin
-  //  Driver.SetColor(0, 0, 255);//Blue. first node data
-  //  Driver.end();
-  //  delay(500);
 }
 
 int calculateStep(int prevValue, int endValue) {
@@ -85,6 +85,8 @@ int calculateVal(int step, int val, int i) {
 }
 
 void crossFade(int color[3]) {
+  if(!inAutoMode) return;
+  
   // Convert to 0-255
   int R = (color[0] * 255) / 100;
   int G = (color[1] * 255) / 100;
@@ -98,10 +100,12 @@ void crossFade(int color[3]) {
     redVal = calculateVal(stepR, redVal, i);
     grnVal = calculateVal(stepG, grnVal, i);
     bluVal = calculateVal(stepB, bluVal, i);
-    
-    Driver.begin(); // begin
-    Driver.SetColor(redVal, grnVal, bluVal); //Write values
-    Driver.end();
+
+    setColor(redVal, grnVal, bluVal);
+
+    readBT();
+
+    if(!inAutoMode) return;
 
     delay(wait); // Pause for 'wait' milliseconds before resuming the loop
   }
@@ -110,6 +114,75 @@ void crossFade(int color[3]) {
   prevR = redVal;
   prevG = grnVal;
   prevB = bluVal;
+  
   delay(hold); // Pause for optional 'wait' milliseconds before resuming the loop
+}
+
+void setColor(int r, int g, int b) {
+  Driver.begin();
+  Driver.SetColor(r, g, b);
+  Driver.end();
+}
+
+void readBT() {
+  if (BT.available()) {
+    char colors[BT.available()] = {};
+    int i = 0;
+    
+    while (BT.available()) {
+      char c = BT.read();
+
+      if (c == 'a') {
+        Serial.println("Auto mode");
+        inAutoMode = true;
+        return;
+      }
+
+      // send the color to the client
+      if (c == 'r') {
+        Serial.println("Read color");
+        sendColor();
+        return;
+      }
+
+      colors[i] = c;
+      i++;
+    }
+
+    Serial.println(colors);
+
+    char *tok;
+    int j = 0;
+
+    tok = strtok(colors, ",");
+    while (tok != NULL) {
+      if (j == 0) {
+        Serial.print("Red: ");
+        redVal = atoi(tok);
+      } else if (j == 1) {
+        Serial.print("Green: ");
+        grnVal = atoi(tok);
+      } else if (j == 2) {
+        Serial.print("Blue: ");
+        bluVal = atoi(tok);
+      }
+
+      Serial.println(atoi(tok));
+
+      tok = strtok (NULL, ",");
+      j++;
+    }
+
+    setColor(redVal, grnVal, bluVal);
+    inAutoMode = false;
+  }
+}
+
+void sendColor() {
+  BT.print(redVal);
+  BT.print(",");
+  BT.print(grnVal);
+  BT.print(",");
+  BT.println(bluVal);
 }
 
